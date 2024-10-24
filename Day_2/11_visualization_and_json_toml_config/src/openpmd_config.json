@@ -1,5 +1,5 @@
 {
-  "backend": "adios2",
+  "backend": "hdf5",
   "iteration_encoding": "group_based",
   "adios2": {
     "engine": {

@@ -100,7 +100,8 @@ auto example(TAccTag const&) -> int
     auto const pitchNextAcc{alpaka::getPitchesInBytes(uNextBufAcc)};
 
     auto workDivExtent
-        = alpaka::getValidWorkDiv(cfgExtent, devAcc, initBufferKernel, uCurrBufAcc.data(), pitchCurrAcc, dx, dy);
+        = alpaka::getValidWorkDiv(cfgExtent, devAcc, initBufferKernel,
+            alpaka::experimental::getMdSpan(uCurrBufAcc), dx, dy);
 
     // Print the workdivision, it has 3 vector each having Dim number of elements
     std::cout << "Workdivision[workDivExtent]:\n\t" << workDivExtent << std::endl;
@@ -108,7 +109,8 @@ auto example(TAccTag const&) -> int
     // Create queue
     alpaka::Queue<Acc, alpaka::NonBlocking> queue{devAcc};
 
-    alpaka::exec<Acc>(queue, workDivExtent, initBufferKernel, uCurrBufAcc.data(), pitchCurrAcc, dx, dy);
+    alpaka::exec<Acc>(queue, workDivExtent, initBufferKernel,
+            alpaka::experimental::getMdSpan(uCurrBufAcc), dx, dy);
 
     StencilKernel stencilKernel;
 
@@ -118,10 +120,8 @@ auto example(TAccTag const&) -> int
         cfgCore,
         devAcc,
         stencilKernel,
-        uCurrBufAcc.data(),
-        uNextBufAcc.data(),
-        pitchCurrAcc,
-        pitchNextAcc,
+        alpaka::experimental::getMdSpan(uCurrBufAcc),
+        alpaka::experimental::getMdSpan(uNextBufAcc),
         haloSize,
         dx,
         dy,
@@ -138,17 +138,15 @@ auto example(TAccTag const&) -> int
             queue,
             workDivCore,
             stencilKernel,
-            uCurrBufAcc.data(),
-            uNextBufAcc.data(),
-            pitchCurrAcc,
-            pitchNextAcc,
+            alpaka::experimental::getMdSpan(uCurrBufAcc),
+            alpaka::experimental::getMdSpan(uNextBufAcc),
             haloSize,
             dx,
             dy,
             dt);
 
         // Apply boundaries
-        applyBoundaries<Acc>(workDivExtent, queue, uNextBufAcc.data(), pitchNextAcc, step, dx, dy, dt);
+        applyBoundaries<Acc>(workDivExtent, queue, alpaka::experimental::getMdSpan(uNextBufAcc), step, dx, dy, dt);
 
 #ifdef PNGWRITER_ENABLED
         if((step - 1) % 100 == 0)

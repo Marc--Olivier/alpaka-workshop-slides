@@ -96,10 +96,11 @@ auto example(TAccTag const&) -> int
         dx,
         dy);
 
-    // Create queue
-    alpaka::Queue<Acc, alpaka::NonBlocking> queue{devAcc};
+    // Create queues
+    alpaka::Queue<Acc, alpaka::NonBlocking> computeQueue{devAcc};
+    alpaka::Queue<Acc, alpaka::NonBlocking> ioQueue{devAcc};
 
-    alpaka::exec<Acc>(queue, workDivExtent, initBufferKernel, alpaka::experimental::getMdSpan(uCurrBufAcc), dx, dy);
+    alpaka::exec<Acc>(computeQueue, workDivExtent, initBufferKernel, alpaka::experimental::getMdSpan(uCurrBufAcc), dx, dy);
     // Print the workdivision, it has 3 vector each having Dim number of elements
     std::cout << "Workdivision[workDivExtent]:\n\t" << workDivExtent << std::endl;
 
@@ -113,48 +114,61 @@ auto example(TAccTag const&) -> int
     // * 3 - Create work divisions using the number of chunks       *
     // **************************************************************
 
-    alpaka::KernelCfg<Acc> const cfgCore = {numNodes, elemPerThread};
-
-    auto workDivCore = alpaka::getValidWorkDiv(
-        cfgCore,
-        devAcc,
-        stencilKernel,
+    auto chunkSize = alpaka::Vec<Dim, Idx>{8u, 8u};
+    auto numChunks = alpaka::Vec<Dim, Idx>{
+        numNodes[0]/chunkSize[0], numNodes[1]/chunkSize[1]};
+    auto kernelFnAttributes = alpaka::getFunctionAttributes<Acc>(
+        devAcc, stencilKernel,
         alpaka::experimental::getMdSpan(uCurrBufAcc),
         alpaka::experimental::getMdSpan(uNextBufAcc),
+        chunkSize,
         haloSize,
         dx,
         dy,
-        dt);
+        dt
+    );
+    auto maxThreadsPerBlock = kernelFnAttributes.maxThreadsPerBlock;
+    auto threadsPerBlock = maxThreadsPerBlock < chunkSize.prod()?
+        alpaka::Vec<Dim, Idx>{1, maxThreadsPerBlock} : chunkSize;
+    auto workDivCore = alpaka::WorkDivMembers<Dim, Idx>{numChunks, threadsPerBlock, elemPerThread};
 
+    std::cout << "Chunk Size:\t" << chunkSize << std::endl;
     // Print the workdivision, it has 3 vector each having Dim number of elements
     std::cout << "Workdivision[workDivCore]:\n\t" << workDivCore << std::endl;
 
     // Simulate
     for(uint32_t step = 1; step <= numTimeSteps; ++step)
     {
+#ifdef PNGWRITER_ENABLED
+        bool const needWriteImage = (step - 1) % 100 == 0;
+#else
+        bool const needWriteImage = false;
+#endif
+        if(needWriteImage) {
+            alpaka::wait(computeQueue);
+        }
+
         // Compute next values
         alpaka::exec<Acc>(
-            queue,
+            computeQueue,
             workDivCore,
             stencilKernel,
             alpaka::experimental::getMdSpan(uCurrBufAcc),
             alpaka::experimental::getMdSpan(uNextBufAcc),
+            chunkSize,
             haloSize,
             dx,
             dy,
             dt);
 
         // Apply boundaries
-        applyBoundaries<Acc>(workDivExtent, queue, alpaka::experimental::getMdSpan(uNextBufAcc), step, dx, dy, dt);
+        applyBoundaries<Acc>(workDivExtent, computeQueue, alpaka::experimental::getMdSpan(uNextBufAcc), step, dx, dy, dt);
 
-#ifdef PNGWRITER_ENABLED
-        if((step - 1) % 100 == 0)
-        {
-            alpaka::memcpy(queue, uBufHost, uCurrBufAcc);
-            alpaka::wait(queue);
+        if(needWriteImage) {
+            alpaka::memcpy(ioQueue, uBufHost, uCurrBufAcc);
+            alpaka::wait(ioQueue);
             writeImage(step - 1, uBufHost);
         }
-#endif
 
         // Swap next and curr (shallow copy)
         std::swap(uNextBufAcc, uCurrBufAcc);
@@ -162,8 +176,9 @@ auto example(TAccTag const&) -> int
 
 
     // Copy device -> host
-    alpaka::memcpy(queue, uBufHost, uCurrBufAcc);
-    alpaka::wait(queue);
+    alpaka::wait(computeQueue);
+    alpaka::memcpy(ioQueue, uBufHost, uCurrBufAcc);
+    alpaka::wait(ioQueue);
 
     // Validate
     auto const [resultIsCorrect, maxError] = validateSolution(uBufHost, dx, dy, tMax);

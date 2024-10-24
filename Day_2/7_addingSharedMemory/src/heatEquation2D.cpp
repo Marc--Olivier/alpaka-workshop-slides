@@ -114,12 +114,17 @@ auto example(TAccTag const&) -> int
     // **************************************************************
     // * Fix the kernel object to work with shared memory           *
     // **************************************************************
-    StencilKernel stencilKernel;
 
     // Appropriate chunk size to split your problem for your Acc
     constexpr Idx xSize = 16u;
     constexpr Idx ySize = 16u;
     constexpr alpaka::Vec<Dim, Idx> chunkSize{ySize, xSize};
+
+    // Does not work at compile time because of compiler problems
+    // constexpr auto sharedMemSize = chunkSize + haloSize + haloSize;
+    // constexpr auto sharedMemSize1D = sharedMemSize.prod();
+    constexpr uint32_t sharedMemSize1D = (xSize + 2 * haloSize[1]) * (ySize + 2 * haloSize[0]);
+    StencilKernel<sharedMemSize1D> stencilKernel;
 
     constexpr alpaka::Vec<Dim, Idx> numChunks{
         alpaka::core::divCeil(numNodes[0], chunkSize[0]),

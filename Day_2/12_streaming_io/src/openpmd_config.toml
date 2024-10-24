@@ -4,16 +4,17 @@ backend = "adios2"
 # It can have unexpected performance implications for ADIOS2.
 # For ADIOS2, use either file-based encoding or (in streaming or streaming-like setups)
 # variable-based encoding.
-iteration_encoding = "group_based"
+iteration_encoding = "variable_based"
 
 [adios2.engine]
-type = "bp5"
+type = "sst"
 
 # Engine parameters listed at:
 # https://adios2.readthedocs.io/en/v2.10.1/engines/engines.html
 [adios2.engine.parameters]
 MarshalMethod = "bp"
 StatsLevel = 1
+QueueFullPolicity = "block"
 
 # Compression operators unfortunately not well documented in ADIOS2.
 # Available operators can be seen in this source file:

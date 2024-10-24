@@ -23,4 +23,9 @@ ALPAKA_FN_ACC T* getElementPtr(T* ptr, alpaka::Vec<TDim, TIdx> const& idx, alpak
     // **************************************************************
     // * Return the pointer to element in ND memory                 *
     // **************************************************************
+    // return reinterpret_cast<T*>(
+    //     reinterpret_cast<std::byte*>(ptr) + (idx[0] * pitch[0] + idx[1] * pitch[1])
+    // );
+    // Shorter way:
+    return reinterpret_cast<T*>(reinterpret_cast<std::byte*>(ptr) + (idx*pitch).sum());
 }

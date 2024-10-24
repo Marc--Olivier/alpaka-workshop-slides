@@ -32,6 +32,7 @@ public:
         using value_t = alpaka::Elem<HostBuffer>;
 
         openPMD::Iteration current_iteration = m_series.writeIterations()[step];
+        auto heat = current_iteration.meshes["heat"];
 
         // TODO: Navigate to correct object in the openPMD hierarchy.
         // Reference:
@@ -45,10 +46,12 @@ public:
         // For determining the datatype, use `openPMD::determineDatatype<>()`.
         // The extent is given as `openPMD::Extent` which is just a `std::vector`.
         // Use the `asOpenPMDExtent()` helper function to convert from the custom Alpaka function.
-        //
-        // openPMD::Dataset dataset_definition{ ... fill this in ... };
-        //
+        openPMD::Dataset dataset_definition{
+                openPMD::determineDatatype<value_t>(),
+                asOpenPMDExtent(logical_extents)};
+
         // TODO: Use resetDataset() for specifying the 2D array's datatype and extent.
+        heat.resetDataset(std::move(dataset_definition));
 
         alpaka::memcpy(dumpQueue, hostBuffer, accBuffer);
         alpaka::wait(dumpQueue);
@@ -58,7 +61,7 @@ public:
         //
         // 1. with `bpls openpmd/heat_000000.bp5` (native ADIOS2 tooling)
         // 2. and with `openpmd-ls openpmd/heat_%06T.bp5` (openPMD-api tooling).
-
+        heat.storeChunkRaw(hostBuffer.data(), {0, 0}, asOpenPMDExtent(logical_extents));
         current_iteration.close();
     }
 

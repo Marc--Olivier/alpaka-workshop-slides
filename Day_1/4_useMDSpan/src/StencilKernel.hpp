@@ -28,13 +28,11 @@ struct StencilKernel
     // * Change to use MDSpan                                       *
     // **************************************************************
 
-    template<typename TAcc, typename TDim, typename TIdx>
+    template<typename TAcc, typename TDim, typename TIdx, typename TMdSpan>
     ALPAKA_FN_ACC auto operator()(
         TAcc const& acc,
-        double const* const uCurrBuf,
-        double* const uNextBuf,
-        alpaka::Vec<TDim, TIdx> const& pitchCurr,
-        alpaka::Vec<TDim, TIdx> const& pitchNext,
+        TMdSpan const spanUCurrBuf,
+        TMdSpan spanUNextBuf,
         alpaka::Vec<TDim, TIdx> const& haloSize,
         double const dx,
         double const dy,
@@ -49,14 +47,12 @@ struct StencilKernel
 
         // offset for halo, as we only want to go over core cells
         auto globalIdx = gridThreadIdx + haloSize;
-        auto const right = globalIdx + alpaka::Vec{0, 1};
-        auto const left = globalIdx + alpaka::Vec{0, -1};
-        auto const up = globalIdx + alpaka::Vec{-1, 0};
-        auto const down = globalIdx + alpaka::Vec{1, 0};
-        auto elem = getElementPtr(uNextBuf, globalIdx, pitchNext);
 
-        *elem = *getElementPtr(uCurrBuf, globalIdx, pitchCurr) * (1.0 - 2.0 * rX - 2.0 * rY)
-                + *getElementPtr(uCurrBuf, right, pitchCurr) * rX + *getElementPtr(uCurrBuf, left, pitchCurr) * rX
-                + *getElementPtr(uCurrBuf, up, pitchCurr) * rY + *getElementPtr(uCurrBuf, down, pitchCurr) * rY;
+        spanUNextBuf(globalIdx[0], globalIdx[1]) =
+                spanUCurrBuf(globalIdx[0], globalIdx[1]) * (1.0 - 2.0 * rX - 2.0 * rY)
+                + spanUCurrBuf(globalIdx[0], globalIdx[1] + 1) * rX
+                + spanUCurrBuf(globalIdx[0], globalIdx[1] - 1) * rX
+                + spanUCurrBuf(globalIdx[0] - 1, globalIdx[1]) * rY
+                + spanUCurrBuf(globalIdx[0] + 1, globalIdx[1]) * rY;
     }
 };

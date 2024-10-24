@@ -18,21 +18,31 @@ import openpmd_api as io
 
 # Runtime configuration. Here written as a JSON object and dumped via `json.dumps()`.
 # https://openpmd-api.readthedocs.io/en/0.16.0/details/backendconfig.html
-config = {"backend": "adios2", "adios2": {"engine": {}, "dataset": {}}}
+config = {
+    "backend": "adios2",
+    "adios2": {"engine": {}, "dataset": {}},
+    "hdf5": {"vfd": {"type":"subfiling"}}
+}
 # pass-through for ADIOS2 engine parameters
 # https://adios2.readthedocs.io/en/latest/engines/engines.html
-config["adios2"]["engine"] = {"parameters": {"Threads": "4"}}
+config["adios2"]["engine"] = {"parameters": {"Threads": "4", "AggregatorRatio":1}}
 config["adios2"]["dataset"] = {"operators": [{"type": "bzip2"}]}
 
 if __name__ == "__main__":
     # TODO: Initialize the Series with the MPI communicator.
     # Note that for execution, you need to set `export MPICH_GPU_SUPPORT_ENABLED=0`,
     # otherwise mpi4py will try looking for GPUs.
+    print("-------------")
     comm = MPI.COMM_WORLD
+    print(comm)
+    print("-------------")
 
     # create a series and specify some global metadata
     series = io.Series(
-        "openPMD/simData_%T.%E", io.Access_Type.create, json.dumps(config)
+        "openPMD/simData_%T.%E",
+        io.Access_Type.create,
+        comm,
+        json.dumps(config)
     )
     series.set_author("Franz Poeschel <f.poeschel@hzdr.de>")
     series.set_software("openPMD-api-python-examples")
@@ -70,7 +80,7 @@ if __name__ == "__main__":
             # of ranks that contribute, modify the dataset definition accordingly.
             # Hint: Particle data is always a one-dimensional list in openPMD.
             # Use `comm.size` to find the number of MPI ranks.
-            pos.reset_dataset(io.Dataset(local_data.dtype, [length]))
+            pos.reset_dataset(io.Dataset(local_data.dtype, [comm.size * length]))
             # TODO: So far, we were able to use the below shorthand for writing from
             # a slice to the entire openPMD component.
             # Since the local rank now only contributes one block within the global
@@ -79,7 +89,7 @@ if __name__ == "__main__":
             # `pos[start:end]` where the start is inclusive and the end exclusive.
             # Use `comm.rank` to find the local rank index.
             # Later, try reading the output using `bpls -D <file.bp5>`.
-            pos[()] = local_data
+            pos[comm.rank * length : (comm.rank + 1) * length] = local_data
 
         # optionally: flush now to clear buffers
         # alternatively: `series.flush()` or `iteration.iteration_flush()`

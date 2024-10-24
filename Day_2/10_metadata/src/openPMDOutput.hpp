@@ -23,6 +23,8 @@ public:
         // TODO: Set global metadata here
         // use methods from
         // https://openpmd-api.readthedocs.io/en/0.16.0/_static/doxyhtml/classopen_p_m_d_1_1_series.html
+        m_series.setAuthor("Marc-Olivier");
+        m_series.setSoftware("Alpaka HeatEquation2D example");
     }
 
     template<typename HostBuffer, typename AccBuffer, typename DumpQueue>
@@ -37,6 +39,14 @@ public:
         openPMD::Iteration current_iteration = m_series.writeIterations()[step];
 
         openPMD::Mesh image = current_iteration.meshes["heat"];
+        image.setAxisLabels({"y", "x"});
+        image.setAttribute("hello", "world");
+        image.setGridGlobalOffset({0., 0.});
+        image.setGridUnitSI(1e-3);  // positions in millimiters
+        image.setGridSpacing<double>({5., 5.});
+        image.setPosition<double>({0.5, 0.5});
+        image.setUnitDimension({{openPMD::UnitDimension::theta, 1}});
+        image.setUnitSI(10.); // values are multiples of 10K.
 
         // TODO: Inspect the file that was produced by this code.
         // It has default values for the metadata.

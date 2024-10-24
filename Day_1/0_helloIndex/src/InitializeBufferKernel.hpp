@@ -33,8 +33,21 @@ struct InitializeBufferKernel
         // * Get and print extents and indices of blocks and threads    *
         // **************************************************************
 
-        // printf(
-        //     "Block index [y,x]: %u %u \t Thread index in block [y,x] : %u %u \t Calculated thread index in grid"
-        //     " [y,x] : %u %u Thread index in grid [y,x] : %u %u \t\n", );
+        auto blockIdxInGrid = alpaka::getIdx<alpaka::Grid, alpaka::Blocks>(acc);
+        auto threadIdxInBlock = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+        auto workDiv = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+        auto calculatedYthreadIdxInGrid = blockIdxInGrid[0] * workDiv[0] + threadIdxInBlock[0];
+        auto calculatedXthreadIdxInGrid = blockIdxInGrid[1] * workDiv[1] + threadIdxInBlock[1];
+        auto threadIdxInGrid = alpaka::getIdx<alpaka::Grid, alpaka::Threads>(acc);
+        printf(
+            "Block index [y,x]: %u %u \t "
+            "Thread index in block [y,x] : %u %u \t "
+            "Calculated thread index in grid [y,x]: %u %u "
+            "Thread index in grid [y,x] : %u %u \t\n",
+            blockIdxInGrid[0], blockIdxInGrid[1],
+            threadIdxInBlock[0], threadIdxInBlock[1],
+            calculatedYthreadIdxInGrid, calculatedXthreadIdxInGrid,
+            threadIdxInGrid[0], threadIdxInGrid[1]
+        );
     }
 };

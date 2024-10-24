@@ -52,12 +52,26 @@ struct StencilKernel
         double const rY = dt / (dy * dy);
 
         // Get indices of memory accesses. Remember the halo cells!
-
+        using Vec = alpaka::Vec<TDim, TIdx>;
+        auto centerIdx = gridThreadIdx + haloSize; // haloSize == alpaka::Vec{1, 1}
+        auto leftIdx = centerIdx - Vec{0, 1};
+        auto rightIdx = centerIdx + Vec{0, 1};
+        auto upIdx = centerIdx - Vec{1, 0};
+        auto downIdx = centerIdx + Vec{1, 0};
 
         // **************************************************************
         // * u_center_{n} = u_center_{n-1} * (1.0 - 2.0 * rX - 2.0 * rY)*
         // *                + u_right_{n-1} * rX + u_left_{n-1} * rX    *
         // *                + u_up_{n-1} * rY + u_down_{n-1} * rY       *
         // **************************************************************
+
+        auto centerCurVal = *getElementPtr(uCurrBuf, centerIdx, pitchCurr);
+        auto leftCurVal = *getElementPtr(uCurrBuf, leftIdx, pitchCurr);
+        auto rightCurVal = *getElementPtr(uCurrBuf, rightIdx, pitchCurr);
+        auto upCurVal = *getElementPtr(uCurrBuf, upIdx, pitchCurr);
+        auto downCurVal = *getElementPtr(uCurrBuf, downIdx, pitchCurr);
+        *getElementPtr(uNextBuf, centerIdx, pitchNext) =
+            centerCurVal * (1.0 - 2.0 * rX - 2.0 * rY) + rightCurVal * rX
+            + leftCurVal * rX + upCurVal * rY + downCurVal * rY;
     }
 };

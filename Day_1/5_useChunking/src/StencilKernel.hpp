@@ -42,18 +42,24 @@ struct StencilKernel
         // **************************************************************
 
         // Get indexes
-        auto const gridThreadIdx = alpaka::getIdx<alpaka::Grid, alpaka::Threads>(acc);
+        auto const blockThreadIdx = alpaka::getIdx<alpaka::Block, alpaka::Threads>(acc);
+        auto const blockThreadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
+        auto const gridBlockIdx = alpaka::getIdx<alpaka::Grid, alpaka::Blocks>(acc);
+        auto const blockStartIdx = gridBlockIdx * chunkSize + haloSize;
 
         // Each kernel executes one element
         double const rX = dt / (dx * dx);
         double const rY = dt / (dy * dy);
 
-        // offset for halo, as we only want to go over core cells
-        auto globalIdx = gridThreadIdx + haloSize;
-
-        uNextBuf(globalIdx[0], globalIdx[1])
-            = uCurrBuf(globalIdx[0], globalIdx[1]) * (1.0 - 2.0 * rX - 2.0 * rY)
-              + uCurrBuf(globalIdx[0], globalIdx[1] + 1) * rX + uCurrBuf(globalIdx[0], globalIdx[1] - 1) * rX
-              + uCurrBuf(globalIdx[0] + 1, globalIdx[1]) * rY + uCurrBuf(globalIdx[0] - 1, globalIdx[1]) * rY;
+        for(auto i = blockThreadIdx[0]; i < chunkSize[0]; i += blockThreadExtent[0]) {
+            for(auto j = blockThreadIdx[1]; j < chunkSize[1]; j += blockThreadExtent[1]) {
+                auto localIdx = alpaka::Vec<Dim, Idx>{i, j};
+                auto globalIdx = blockStartIdx + localIdx;
+                uNextBuf(globalIdx[0], globalIdx[1])
+                    = uCurrBuf(globalIdx[0], globalIdx[1]) * (1.0 - 2.0 * rX - 2.0 * rY)
+                    + uCurrBuf(globalIdx[0], globalIdx[1] + 1) * rX + uCurrBuf(globalIdx[0], globalIdx[1] - 1) * rX
+                    + uCurrBuf(globalIdx[0] + 1, globalIdx[1]) * rY + uCurrBuf(globalIdx[0] - 1, globalIdx[1]) * rY;
+            }
+        }
     }
 };

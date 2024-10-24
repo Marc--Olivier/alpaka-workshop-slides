@@ -39,12 +39,19 @@ auto example(TAccTag const&) -> int
     // **************************************************************
 
     // Set Dim and Idx type
+    using Dim = alpaka::DimInt<2>;
+    using Idx = uint32_t;
 
     // Define the accelerator
     using Acc = alpaka::TagToAcc<TAccTag, Dim, Idx>;
+    // To hardcode the accelerator: using ACC = alpaka::AccGpuHipRt<Dim, Idx>;
     std::cout << "Using alpaka accelerator: " << alpaka::getAccName<Acc>() << std::endl;
 
     // Select specific devices
+    auto hostPlatform = alpaka::PlatformCpu{};
+    auto accPlatform = alpaka::Platform<Acc>{};
+    auto devHost = alpaka::getDevByIdx(hostPlatform, 0);
+    auto devAcc = alpaka::getDevByIdx(accPlatform, 0);
 
     // **************************************************************
     // * Define the simulation domain, time resolution, etc         *
@@ -84,6 +91,9 @@ auto example(TAccTag const&) -> int
 
 
     // Define host buffer
+    auto hostBuf = alpaka::allocBuf<double, Idx>(devHost, extent);
+    auto devCurrBuf = alpaka::allocBuf<double, Idx>(devAcc, extent);
+    auto devNextBuf = alpaka::allocBuf<double, Idx>(devAcc, extent);
 
     // Define accelerator buffer
 
@@ -95,17 +105,27 @@ auto example(TAccTag const&) -> int
     // *   4 - Execute kernel                                       *
     // **************************************************************
 
+    InitializeBufferKernel initBufKernel;
+    
+    auto elementsPerThread = alpaka::Vec<Dim, Idx>{1,1};
+    auto initKernelCfg = alpaka::KernelCfg<Acc>{extent, elementsPerThread};
+    auto initPitches = alpaka::getPitchesInBytes(devCurrBuf);
+    auto extentWorkDiv = alpaka::getValidWorkDiv<Acc>(
+        initKernelCfg, devAcc, initBufKernel, devCurrBuf.data(), initPitches, dx, dy);
+
     // Sets buffer to initial conditions
+    auto queue = alpaka::Queue<Acc, alpaka::NonBlocking>{devAcc};;
+    alpaka::exec<Acc>(queue, extentWorkDiv, initBufKernel, devCurrBuf.data(), initPitches, dx, dy);
 
-    // Define a workdiv for the given problem
-    // Print the workdivision, it has 3 vector each having Dim number of elements
-    // std::cout << "Workdivision:\n\t" << yourWorkDivisionName << std::endl;
+    // // Define a workdiv for the given problem
+    // // Print the workdivision, it has 3 vector each having Dim number of elements
+    // // std::cout << "Workdivision:\n\t" << yourWorkDivisionName << std::endl;
 
-    // Create queue
-    alpaka::Queue<Acc, alpaka::NonBlocking> queue{devAcc};
+    // // Create queue
+    // alpaka::Queue<Acc, alpaka::NonBlocking> queue{devAcc};
 
-    // Execute
-    alpaka::exec<Acc>(queue, workDivExtent, initBufferKernel, uCurrBufAcc.data(), pitchCurrAcc, dx, dy);
+    // // Execute
+    // alpaka::exec<Acc>(queue, workDivExtent, initBufferKernel, uCurrBufAcc.data(), pitchCurrAcc, dx, dy);
 
 
     // **************************************************************
@@ -116,14 +136,24 @@ auto example(TAccTag const&) -> int
     // *   4 - Aplly boundaries, IO, swap buffers                   *
     // **************************************************************
 
+    StencilKernel stencilKernel;
+    auto kernelCfgCore = alpaka::KernelCfg<Acc>{numNodes, elementsPerThread};
+    auto currPitches = alpaka::getPitchesInBytes(devCurrBuf);
+    auto nextPitches = alpaka::getPitchesInBytes(devNextBuf);
+    auto coreWorkDiv = alpaka::getValidWorkDiv<Acc>(
+        kernelCfgCore, devAcc, stencilKernel, devCurrBuf.data(), devNextBuf.data(),
+        currPitches, nextPitches, haloSize, dx, dy, dt);
 
     // Simulate
     for(uint32_t step = 1; step <= numTimeSteps; ++step)
     {
         // Apply stencil
+        alpaka::exec<Acc>(
+            queue, coreWorkDiv, stencilKernel, devCurrBuf.data(), devNextBuf.data(),
+            currPitches, nextPitches, haloSize, dx, dy, dt);
 
         // Apply boundaries
-        applyBoundaries();
+        applyBoundaries<Acc>(extentWorkDiv, queue, devNextBuf.data(), nextPitches, step, dx, dy, dt);
 
 #ifdef PNGWRITER_ENABLED
         if((step - 1) % 100 == 0)
@@ -131,10 +161,14 @@ auto example(TAccTag const&) -> int
             // **************************************************************
             // * Transfer data back to host for IO                          *
             // **************************************************************
-            writeImage(step - 1, uBufHost);
+            alpaka::memcpy(queue, hostBuf, devCurrBuf);
+            alpaka::wait(queue);
+            writeImage(step - 1, hostBuf);
         }
 #endif
         // Swap
+        std::swap(devCurrBuf, devNextBuf);
+        std::swap(currPitches, nextPitches);
     }
 
     // **************************************************************
@@ -142,10 +176,11 @@ auto example(TAccTag const&) -> int
     // **************************************************************
 
     // Copy device -> host
-
+    alpaka::memcpy(queue, hostBuf, devCurrBuf);
+    alpaka::wait(queue);
 
     // Validate
-    auto const [resultIsCorrect, maxError] = validateSolution(uBufHost, dx, dy, tMax);
+    auto const [resultIsCorrect, maxError] = validateSolution(hostBuf, dx, dy, tMax);
 
     if(resultIsCorrect)
     {

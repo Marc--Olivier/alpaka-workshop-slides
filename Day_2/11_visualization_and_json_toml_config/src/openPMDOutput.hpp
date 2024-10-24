@@ -46,7 +46,10 @@ public:
          *
          * Bonus: Try writing an HDF5 file instead of ADIOS2!
          */
-        m_series = openPMD::Series("openpmd/heat_%06T.bp5", openPMD::Access::CREATE);
+        // To define the configuration inlineL:
+        // m_series = openPMD::Series("openpmd/heat.%E", openPMD::Access::CREATE, "<json_string...>");
+        // `@` in `"@./openpmd_config.json"` enables to read the file.
+        m_series = openPMD::Series("openpmd/heat.%E", openPMD::Access::CREATE, "@./openpmd_config.json");
         m_series.setMeshesPath("images");
         m_series.setAuthor("Franz Poeschel");
         m_series.setSoftware("Alpaka HeatEquation2D Example");

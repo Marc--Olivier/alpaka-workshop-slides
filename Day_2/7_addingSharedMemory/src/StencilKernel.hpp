@@ -25,6 +25,7 @@
 // * Pass the shared memory size at compile time to             *
 // * use static share memory                                    *
 // **************************************************************
+template<uint32_t T_SharedMemSize1D>
 struct StencilKernel
 {
     template<typename TAcc, typename TMdSpan, typename TDim, typename TIdx>
@@ -44,6 +45,8 @@ struct StencilKernel
         // * 2 - Fill shared memory with current values                 *
         // * 3 - Read from shared memory to update the next buffer      *
         // **************************************************************
+        auto & sdata = alpaka::declareSharedVar<double[ T_SharedMemSize1D ], __COUNTER__ >(acc);
+        auto sharedMemSize2D = chunkSize + haloSize + haloSize;
 
         // Get indexes
         auto const gridBlockIdx = alpaka::getIdx<alpaka::Grid, alpaka::Blocks>(acc);
@@ -56,19 +59,33 @@ struct StencilKernel
 
         auto const blockThreadExtent = alpaka::getWorkDiv<alpaka::Block, alpaka::Threads>(acc);
 
+        for(auto i = blockThreadIdx[0]; i < sharedMemSize2D[0]; i += blockThreadExtent[0])
+        {
+            for(auto j = blockThreadIdx[1]; j < sharedMemSize2D[1]; j += blockThreadExtent[1])
+            {
+                auto localIdx = alpaka::Vec<TDim, TIdx>(i, j);
+                auto const globalIdx = localIdx + blockStartThreadIdx; // Don't add halo in order to fill in its values.
+                auto localIdx1d = alpaka::mapIdx<1>(localIdx, sharedMemSize2D)[0];
+                sdata[localIdx1d] = uCurrBuf(globalIdx[0], globalIdx[1]);
+            }
+        }
+
+        alpaka::syncBlockThreads(acc);
+
         // go over only core cells and update nextBuf
         for(auto i = blockThreadIdx[0]; i < chunkSize[0]; i += blockThreadExtent[0])
         {
             for(auto j = blockThreadIdx[1]; j < chunkSize[1]; j += blockThreadExtent[1])
             {
                 // offset for halo, as we only want to go over core cells
-                auto localIdx = alpaka::Vec(i, j) + haloSize;
+                auto localIdx = alpaka::Vec<TDim, TIdx>(i, j) + haloSize;
+                auto localIdx1d = alpaka::mapIdx<1>(localIdx, sharedMemSize2D)[0];
                 auto const globalIdx = localIdx + blockStartThreadIdx;
 
                 uNextBuf(globalIdx[0], globalIdx[1])
-                    = uCurrBuf(globalIdx[0], globalIdx[1]) * (1.0 - 2.0 * rX - 2.0 * rY)
-                      + uCurrBuf(globalIdx[0], globalIdx[1] + 1) * rX + uCurrBuf(globalIdx[0], globalIdx[1] - 1) * rX
-                      + uCurrBuf(globalIdx[0] + 1, globalIdx[1]) * rY + uCurrBuf(globalIdx[0] - 1, globalIdx[1]) * rY;
+                    = sdata[localIdx1d] * (1.0 - 2.0 * rX - 2.0 * rY)
+                      + sdata[localIdx1d + 1] * rX + sdata[localIdx1d - 1] * rX
+                      + sdata[localIdx1d + sharedMemSize2D[1]] * rY + sdata[localIdx1d  - sharedMemSize2D[1]] * rY;
             }
         }
     }

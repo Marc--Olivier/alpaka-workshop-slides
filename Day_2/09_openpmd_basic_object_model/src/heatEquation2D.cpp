@@ -182,7 +182,7 @@ auto example(TAccTag const&) -> int
             dy,
             dt);
 
-        if constexpr(!std::is_same_v<TAccTag, alpaka::TagCpuSerial>)
+        // if constexpr(!std::is_same_v<TAccTag, alpaka::TagCpuSerial>)
         {
             if((step + 1) % 10 == 0)
             {

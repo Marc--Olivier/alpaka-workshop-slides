@@ -35,6 +35,7 @@ public:
     {
         using value_t = alpaka::Elem<AccBuffer>;
 
+        // On the client side, call `readIteration`.
         openPMD::Iteration current_iteration = m_series.writeIterations()[step];
         // Time is given in terms of nanoseconds
         current_iteration.setTimeUnitSI(10e-9);
@@ -93,6 +94,9 @@ public:
          * The signature of the needed `alpaka::createView()` overload is:
          * `auto createView(TDev const& dev, TElem* pMem, TExtent const& extent, TPitch pitch)`
          */
+        auto hostBuffer = alpaka::createView(devHost, openPMDBuffer.currentBuffer().data(), logical_extents);
+        alpaka::memcpy(dumpQueue, hostBuffer, accBuffer);
+        alpaka::wait(dumpQueue);
 
         current_iteration.close();
     }

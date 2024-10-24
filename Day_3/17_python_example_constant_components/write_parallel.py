@@ -66,10 +66,11 @@ if __name__ == "__main__":
         temperature.unit_dimension = {io.Unit_Dimension.theta: 1.0}
         temperature.axis_labels = ["x", "y"]
         temperature.grid_spacing = [1.0, 1.0]
-        # temperature has no x,y,z components, so skip the last layer:
-        temperature_dataset = temperature
-        # let's say we are in a 3x3 mesh
-        temperature_dataset.reset_dataset(io.Dataset(np.dtype("double"), [3, 3]))
+        # # temperature has no x,y,z components, so skip the last layer:
+        # temperature_dataset = temperature
+        # # let's say we are in a 3x3 mesh
+        # temperature_dataset.reset_dataset(io.Dataset(np.dtype("double"), [3, 3]))
+        temperature.reset_dataset(io.Dataset(np.dtype("double"), [3, 3]))
 
         # TODO: What if a quantity is constant over the inspected mesh?
         # Or, maybe, we want to store constant properties of a particle species,
@@ -85,6 +86,8 @@ if __name__ == "__main__":
         # can also be used to store empty datasets, e.g. when all particles have
         # left the observed area. This can be done manually through `make_constant()`,
         # or more idiomatically with `make_empty()`.
+
+        temperature.make_constant(273.15)
 
         # After closing the iteration, the readers can see the iteration.
         # It can no longer be modified.
